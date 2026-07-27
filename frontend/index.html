@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>InvoiceIQ — AI Document Intelligence & Extraction Dashboard</title>
+  
+  <!-- Fonts & Icons -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <!-- Stylesheet -->
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+  <!-- Navigation Bar -->
+  <header class="navbar">
+    <div class="brand">
+      <div class="brand-icon">
+        <i data-lucide="scan-line" style="color: white;"></i>
+      </div>
+      <div>
+        <span class="brand-title">InvoiceIQ</span>
+        <span class="brand-tag">v1.0 API</span>
+      </div>
+    </div>
+
+    <div class="nav-actions">
+      <div class="status-badge">
+        <span class="status-dot"></span>
+        <span id="provider-status-text">Vision AI Active</span>
+      </div>
+      <button id="btn-quick-sample" class="btn btn-secondary">
+        <i data-lucide="sparkles"></i> Load Sample Invoice
+      </button>
+      <button id="btn-open-upload" class="btn btn-primary">
+        <i data-lucide="upload-cloud"></i> Upload Document
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Workspace -->
+  <main class="main-container">
+
+    <!-- Metrics Cards -->
+    <section class="metrics-grid">
+      <div class="metric-card">
+        <span class="metric-label">Total Documents Processed</span>
+        <span class="metric-value" id="stat-docs">0</span>
+        <span class="metric-sub"><i data-lucide="check-circle-2" style="width: 14px; display: inline;"></i> 100% OCR preprocessed</span>
+      </div>
+      <div class="metric-card">
+        <span class="metric-label">Extracted Spend Volume</span>
+        <span class="metric-value" id="stat-spend">$0.00</span>
+        <span class="metric-sub"><i data-lucide="trending-up" style="width: 14px; display: inline;"></i> Consolidated across vendors</span>
+      </div>
+      <div class="metric-card">
+        <span class="metric-label">Average AI Confidence</span>
+        <span class="metric-value" id="stat-confidence">0.0%</span>
+        <span class="metric-sub"><i data-lucide="shield-check" style="width: 14px; display: inline;"></i> Pydantic math cross-checks</span>
+      </div>
+      <div class="metric-card">
+        <span class="metric-label">System Integrity Status</span>
+        <span class="metric-value" style="color: var(--accent-success);" id="stat-integrity">HEALTHY</span>
+        <span class="metric-sub"><i data-lucide="zap" style="width: 14px; display: inline;"></i> Fast Extraction Engine</span>
+      </div>
+    </section>
+
+    <!-- Upload Dropzone -->
+    <section class="dropzone" id="file-dropzone">
+      <input type="file" id="file-input" multiple accept="image/*,application/pdf" style="display: none;">
+      <i data-lucide="file-up" class="dropzone-icon"></i>
+      <h3 class="dropzone-title">Drag & Drop Invoices or Receipts Here</h3>
+      <p class="dropzone-desc">Supports PDF, PNG, JPG, WEBP • Automatic deskewing, Vision LLM extraction, & line-item tagging</p>
+    </section>
+
+    <!-- Workspace Grid -->
+    <section class="workspace-grid">
+
+      <!-- Left Column: Document Queue -->
+      <div class="panel-card">
+        <div class="panel-header">
+          <h2 class="panel-title"><i data-lucide="file-text"></i> Document Queue</h2>
+          <button id="btn-refresh-list" class="btn btn-outline btn-sm">
+            <i data-lucide="rotate-cw"></i> Refresh
+          </button>
+        </div>
+
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>Document</th>
+                <th>Vendor</th>
+                <th>Total</th>
+                <th>AI Score</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="documents-tbody">
+              <tr>
+                <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 2rem;">
+                  No documents uploaded yet. Upload a file or click "Load Sample Invoice".
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Right Column: Document Inspector & Inline Form -->
+      <div class="panel-card" id="inspector-card">
+        <div class="panel-header">
+          <h2 class="panel-title"><i data-lucide="inspect"></i> Data Inspector & Manual Review</h2>
+          <div style="display: flex; gap: 0.5rem;">
+            <button id="btn-export-csv" class="btn btn-outline btn-sm" disabled>
+              <i data-lucide="download"></i> CSV
+            </button>
+            <button id="btn-export-json" class="btn btn-outline btn-sm" disabled>
+              <i data-lucide="code"></i> JSON
+            </button>
+            <button id="btn-trigger-webhook" class="btn btn-secondary btn-sm" disabled>
+              <i data-lucide="webhook"></i> n8n Webhook
+            </button>
+          </div>
+        </div>
+
+        <!-- Image Preview Frame -->
+        <div class="image-viewer" id="image-viewer-container">
+          <p style="color: var(--text-muted);" id="image-placeholder-text">Select a document from queue to inspect visual preview.</p>
+          <img id="document-preview-img" src="" alt="Document Preview" style="display: none;">
+        </div>
+
+        <!-- Form Editor -->
+        <form id="inspector-form" onsubmit="return false;">
+          <div class="form-grid">
+            <div class="form-group">
+              <label for="input-vendor">Vendor Name</label>
+              <input type="text" id="input-vendor" placeholder="e.g. AWS, Uber, Staples">
+            </div>
+            <div class="form-group">
+              <label for="input-inv-num">Invoice Number</label>
+              <input type="text" id="input-inv-num" placeholder="e.g. INV-1042">
+            </div>
+            <div class="form-group">
+              <label for="input-date">Invoice Date</label>
+              <input type="text" id="input-date" placeholder="YYYY-MM-DD">
+            </div>
+            <div class="form-group">
+              <label for="input-due-date">Due Date</label>
+              <input type="text" id="input-due-date" placeholder="YYYY-MM-DD">
+            </div>
+            <div class="form-group">
+              <label for="input-currency">Currency</label>
+              <select id="input-currency">
+                <option value="USD">USD ($)</option>
+                <option value="EUR">EUR (€)</option>
+                <option value="TND">TND (DT)</option>
+                <option value="GBP">GBP (£)</option>
+                <option value="CAD">CAD ($)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="input-subtotal">Subtotal</label>
+              <input type="number" step="0.01" id="input-subtotal">
+            </div>
+            <div class="form-group">
+              <label for="input-tax">Tax Amount</label>
+              <input type="number" step="0.01" id="input-tax">
+            </div>
+            <div class="form-group">
+              <label for="input-total">Grand Total</label>
+              <input type="number" step="0.01" id="input-total" style="font-weight: 700; color: var(--accent-success);">
+            </div>
+          </div>
+
+          <!-- Line Items Section -->
+          <div style="margin-top: 1rem;">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem;">
+              <label>Extracted Line Items</label>
+              <button type="button" id="btn-add-line-item" class="btn btn-outline btn-sm">
+                <i data-lucide="plus"></i> Add Item
+              </button>
+            </div>
+
+            <div class="table-wrapper">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Description</th>
+                    <th style="width: 80px;">Qty</th>
+                    <th style="width: 100px;">Unit ($)</th>
+                    <th style="width: 110px;">Total ($)</th>
+                    <th style="width: 150px;">Category</th>
+                    <th style="width: 40px;"></th>
+                  </tr>
+                </thead>
+                <tbody id="line-items-tbody">
+                  <tr>
+                    <td colspan="6" style="text-align: center; color: var(--text-muted); font-size: 0.8rem;">
+                      No line items extracted.
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Save Verification -->
+          <div style="margin-top: 1.25rem; display: flex; justify-content: flex-end;">
+            <button type="button" id="btn-save-verify" class="btn btn-primary" disabled>
+              <i data-lucide="check-check"></i> Save & Mark Verified
+            </button>
+          </div>
+        </form>
+
+      </div>
+
+    </section>
+
+    <!-- Spend Analytics Section -->
+    <section class="panel-card" style="margin-top: 1rem;">
+      <div class="panel-header">
+        <h2 class="panel-title"><i data-lucide="pie-chart"></i> Spend Analytics & Expense Categorization</h2>
+      </div>
+
+      <div class="charts-grid">
+        <div>
+          <h4 style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 0.5rem;">Spend Distribution by Vendor</h4>
+          <div class="chart-box">
+            <canvas id="chart-vendor"></canvas>
+          </div>
+        </div>
+        <div>
+          <h4 style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 0.5rem;">Expense Categorization Breakdown</h4>
+          <div class="chart-box">
+            <canvas id="chart-category"></canvas>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Export / Webhook Modal -->
+  <div class="modal-overlay" id="export-modal">
+    <div class="modal-card">
+      <div style="display: flex; align-items: center; justify-content: space-between;">
+        <h3 style="display: flex; align-items: center; gap: 0.5rem;"><i data-lucide="send"></i> Export & Webhook Integration</h3>
+        <button id="btn-close-modal" style="background: none; border: none; color: var(--text-muted); cursor: pointer;">
+          <i data-lucide="x"></i>
+        </button>
+      </div>
+
+      <p style="font-size: 0.85rem; color: var(--text-muted);">
+        InvoiceIQ formats extracted document data directly into <strong>QuickBooks / Xero / n8n / Airtable</strong> JSON structures.
+      </p>
+
+      <div class="form-group">
+        <label for="modal-webhook-url">Target Webhook URL (n8n / Zapier)</label>
+        <input type="text" id="modal-webhook-url" placeholder="https://primary-n8n-instance.hooks.n8n.cloud/webhook/..." value="https://httpbin.org/post">
+      </div>
+
+      <div>
+        <label style="margin-bottom: 0.25rem; display: block;">QuickBooks JSON Payload Preview</label>
+        <pre id="modal-json-preview">{}</pre>
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 0.75rem;">
+        <button class="btn btn-secondary" id="btn-modal-close">Cancel</button>
+        <button class="btn btn-primary" id="btn-modal-dispatch">
+          <i data-lucide="zap"></i> Dispatch Webhook
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- App JavaScript -->
+  <script src="js/app.js"></script>
+</body>
+</html>
