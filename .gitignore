@@ -1,0 +1,24 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual Environment
+venv/
+ENV/
+env/
+
+# Configuration
+.env
+
+# Database
+*.db
+*.sqlite3
+
+# Document Uploads & Temp Files
+uploads/
+!uploads/.gitkeep
+samples/
+!samples/.gitkeep
+.system_generated/
+*.log
