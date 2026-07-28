@@ -39,6 +39,8 @@ app.mount("/uploads", StaticFiles(directory=settings.UPLOAD_DIR), name="uploads"
 FRONTEND_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "..", "frontend")
 
 if os.path.exists(FRONTEND_DIR):
+    app.mount("/css", StaticFiles(directory=os.path.join(FRONTEND_DIR, "css")), name="css")
+    app.mount("/js", StaticFiles(directory=os.path.join(FRONTEND_DIR, "js")), name="js")
     app.mount("/dashboard", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
 
 @app.get("/")
