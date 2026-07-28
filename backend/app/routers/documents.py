@@ -64,7 +64,12 @@ async def upload_documents(
         preprocessed_path = DocumentPreprocessor.preprocess_image(saved_path)
 
         # Vision AI Extraction
-        raw_extracted = await AIVisionExtractor.extract_document_data(preprocessed_path, mime_type)
+        try:
+            raw_extracted = await AIVisionExtractor.extract_document_data(preprocessed_path, mime_type)
+        except Exception as e:
+            doc.status = "error"
+            db.commit()
+            raise HTTPException(status_code=400, detail=str(e))
 
         # Extract items
         raw_items = raw_extracted.get("line_items", [])

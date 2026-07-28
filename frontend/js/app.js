@@ -531,7 +531,8 @@ async function handleFileUpload(files) {
         inspectDocument(uploadedDocs[0].id);
       }
     } else {
-      alert('Upload failed.');
+      const errData = await res.json().catch(() => ({}));
+      alert(`Upload failed: ${errData.detail || 'Server error'}`);
     }
   } catch (e) {
     laser.classList.remove('scanning');

@@ -50,7 +50,10 @@ class AIVisionExtractor:
                 base64_img = base64.b64encode(img_bytes).decode("utf-8")
         except Exception as e:
             print(f"[AI Extractor Error] Failed to read file {file_path}: {e}")
-            return AIVisionExtractor._generate_fallback_extraction(os.path.basename(file_path))
+            raise ValueError(f"Failed to read upload file: {e}")
+
+        # Check if any live API keys are set
+        has_keys = bool(settings.GROQ_API_KEY or settings.OPENAI_API_KEY or settings.GEMINI_API_KEY)
 
         # 1. Try Groq Vision API if key configured
         if settings.GROQ_API_KEY:
@@ -61,6 +64,8 @@ class AIVisionExtractor:
                     return res
             except Exception as e:
                 print(f"[Groq Vision Error]: {e}")
+                if has_keys:
+                    raise ValueError(f"Groq API Error: {e}")
 
         # 2. Try OpenAI Vision API if key configured
         if settings.OPENAI_API_KEY:
@@ -71,6 +76,8 @@ class AIVisionExtractor:
                     return res
             except Exception as e:
                 print(f"[OpenAI Vision Error]: {e}")
+                if has_keys:
+                    raise ValueError(f"OpenAI API Error: {e}")
 
         # 3. Try Gemini Vision API if key configured
         if settings.GEMINI_API_KEY:
@@ -81,12 +88,17 @@ class AIVisionExtractor:
                     return res
             except Exception as e:
                 print(f"[Gemini Vision Error]: {e}")
+                if has_keys:
+                    raise ValueError(f"Gemini API Error: {e}")
 
-        # 4. Fallback to Intelligent Demo Engine
-        print(f"[AI Extractor] Using Intelligent Demo Extractor engine for {file_path}")
-        res = AIVisionExtractor._generate_fallback_extraction(os.path.basename(file_path))
-        res["extraction_provider"] = "intelligent_fallback_engine"
-        return res
+        # 4. Fallback to Intelligent Demo Engine (only if no keys are set)
+        if not has_keys:
+            print(f"[AI Extractor] Using Intelligent Demo Extractor engine for {file_path}")
+            res = AIVisionExtractor._generate_fallback_extraction(os.path.basename(file_path))
+            res["extraction_provider"] = "intelligent_fallback_engine"
+            return res
+        
+        raise ValueError("AI Vision extraction failed. Check API key status.")
 
     @staticmethod
     async def _call_groq_vision(base64_img: str, mime_type: str) -> Dict[str, Any]:
@@ -117,7 +129,12 @@ class AIVisionExtractor:
             if resp.status_code == 200:
                 content = resp.json()["choices"][0]["message"]["content"]
                 return json.loads(content)
-        return None
+            else:
+                try:
+                    error_msg = resp.json()["error"]["message"]
+                except Exception:
+                    error_msg = resp.text
+                raise ValueError(f"HTTP {resp.status_code}: {error_msg}")
 
     @staticmethod
     async def _call_openai_vision(base64_img: str, mime_type: str) -> Dict[str, Any]:
@@ -147,7 +164,12 @@ class AIVisionExtractor:
             if resp.status_code == 200:
                 content = resp.json()["choices"][0]["message"]["content"]
                 return json.loads(content)
-        return None
+            else:
+                try:
+                    error_msg = resp.json()["error"]["message"]
+                except Exception:
+                    error_msg = resp.text
+                raise ValueError(f"HTTP {resp.status_code}: {error_msg}")
 
     @staticmethod
     async def _call_gemini_vision(base64_img: str, mime_type: str) -> Dict[str, Any]:
@@ -174,7 +196,8 @@ class AIVisionExtractor:
                 # Extract json codeblock if present
                 clean_text = re.sub(r'```json\s*|\s*```', '', text).strip()
                 return json.loads(clean_text)
-        return None
+            else:
+                raise ValueError(f"HTTP {resp.status_code}: {resp.text}")
 
     @staticmethod
     def _generate_fallback_extraction(filename: str) -> Dict[str, Any]:
