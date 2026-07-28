@@ -11,9 +11,59 @@ document.addEventListener('DOMContentLoaded', () => {
     lucide.createIcons();
   }
   setupEventListeners();
+  setupNavigationTabs();
+  setupInspectorTabs();
   loadAnalytics();
   loadDocumentsQueue();
 });
+
+function setupNavigationTabs() {
+  const dashBtn = document.getElementById('tab-btn-dashboard');
+  const analyticsBtn = document.getElementById('tab-btn-analytics');
+  
+  const dashView = document.getElementById('view-dashboard');
+  const analyticsView = document.getElementById('view-analytics');
+
+  dashBtn.addEventListener('click', () => {
+    dashBtn.classList.add('active');
+    analyticsBtn.classList.remove('active');
+    dashView.classList.add('active');
+    analyticsView.classList.remove('active');
+  });
+
+  analyticsBtn.addEventListener('click', () => {
+    analyticsBtn.classList.add('active');
+    dashBtn.classList.remove('active');
+    analyticsView.classList.add('active');
+    dashView.classList.remove('active');
+    // Force chart sizing re-computation
+    loadAnalytics();
+  });
+}
+
+function setupInspectorTabs() {
+  const tabButtons = document.querySelectorAll('.i-tab-btn');
+  tabButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      // Remove active from all buttons & contents
+      document.querySelectorAll('.i-tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.inspector-tab-content').forEach(c => c.classList.remove('active'));
+
+      // Add active to current
+      btn.classList.add('active');
+      const targetId = btn.getAttribute('data-target');
+      document.getElementById(targetId).classList.add('active');
+    });
+  });
+}
+
+function triggerScanLaserEffect() {
+  const laser = document.getElementById('scanner-laser-line');
+  laser.classList.add('scanning');
+  setTimeout(() => {
+    laser.classList.remove('scanning');
+  }, 2000);
+}
 
 function setupEventListeners() {
   // Drag & drop upload
@@ -114,6 +164,7 @@ async function loadAnalytics() {
     document.getElementById('stat-spend').textContent = `$${data.total_spend.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
     document.getElementById('stat-confidence').textContent = `${data.avg_confidence}%`;
 
+    // Render Charts
     renderVendorChart(data.vendor_breakdown);
     renderCategoryChart(data.category_breakdown);
   } catch (e) {
@@ -121,32 +172,33 @@ async function loadAnalytics() {
   }
 }
 
-// Documents queue table
+// Documents queue rendering as custom card layouts
 async function loadDocumentsQueue() {
   try {
     const res = await fetch(`${API_BASE}/documents`);
     if (!res.ok) return;
     documentsList = await res.json();
 
-    const tbody = document.getElementById('documents-tbody');
-    tbody.innerHTML = '';
+    const queueContainer = document.getElementById('documents-tbody');
+    queueContainer.innerHTML = '';
 
     if (documentsList.length === 0) {
-      tbody.innerHTML = `
-        <tr>
-          <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 2rem;">
-            No documents in database. Upload an invoice or click "Load Sample Invoice".
-          </td>
-        </tr>
+      queueContainer.innerHTML = `
+        <div class="pipeline-empty">
+          <i data-lucide="inbox"></i>
+          <p>Pipeline is currently empty. Drop a scan or load demo data.</p>
+        </div>
       `;
+      if (window.lucide) lucide.createIcons();
       return;
     }
 
     documentsList.forEach((doc, idx) => {
       const ext = doc.extraction || {};
-      const tr = document.createElement('tr');
+      const card = document.createElement('div');
+      card.className = 'pipeline-row-card';
       if (currentDocument && currentDocument.id === doc.id) {
-        tr.classList.add('selected');
+        card.classList.add('selected');
       }
 
       // Confidence badge class
@@ -154,34 +206,35 @@ async function loadDocumentsQueue() {
       if (ext.confidence_status === 'NEEDS_REVIEW') badgeClass = 'badge-review';
       if (ext.confidence_status === 'FLAG') badgeClass = 'badge-flag';
 
-      const dupTag = ext.is_duplicate ? '<span class="badge badge-dup">DUPLICATE</span>' : '';
+      const dupTag = ext.is_duplicate ? '<span class="badge badge-dup">DUP</span>' : '';
+      const docTypeIcon = doc.mime_type.includes('pdf') ? 'file-text' : 'image';
 
-      tr.innerHTML = `
-        <td>
-          <div style="font-weight: 600;">${escapeHtml(doc.filename)}</div>
-          <div style="font-size: 0.75rem; color: var(--text-muted);">${doc.mime_type} • ${(doc.file_size / 1024).toFixed(1)} KB</div>
-        </td>
-        <td>${escapeHtml(ext.vendor_name || 'Processing...')}</td>
-        <td style="font-weight: 700;">${ext.currency || '$'} ${(ext.total_amount || 0).toFixed(2)}</td>
-        <td>
-          <span class="badge ${badgeClass}">${ext.confidence_score || 0}% ${ext.confidence_status || ''}</span>
-          ${dupTag}
-        </td>
-        <td>
-          <span style="font-size: 0.8rem; text-transform: uppercase; color: var(--text-muted); font-weight: 600;">
-            ${doc.status}
-          </span>
-        </td>
+      card.innerHTML = `
+        <div class="doc-info">
+          <div class="doc-icon-frame">
+            <i data-lucide="${docTypeIcon}" style="width: 18px; height: 18px;"></i>
+          </div>
+          <div class="doc-meta">
+            <span class="doc-name">${escapeHtml(doc.filename)}</span>
+            <span class="doc-sub">${escapeHtml(ext.vendor_name || 'Processing...')}</span>
+          </div>
+        </div>
+        <div class="doc-financials">
+          <span class="doc-amount">${ext.currency || '$'} ${(ext.total_amount || 0).toFixed(2)}</span>
+          <span class="badge ${badgeClass}">${ext.confidence_score || 0}%</span>
+        </div>
       `;
 
-      tr.addEventListener('click', () => inspectDocument(doc.id));
-      tbody.appendChild(tr);
+      card.addEventListener('click', () => inspectDocument(doc.id));
+      queueContainer.appendChild(card);
 
       // Auto-select first document if none selected
       if (idx === 0 && !currentDocument) {
         inspectDocument(doc.id);
       }
     });
+
+    if (window.lucide) lucide.createIcons();
 
   } catch (e) {
     console.error('Error loading document queue:', e);
@@ -195,8 +248,17 @@ async function inspectDocument(docId) {
     if (!res.ok) return;
     currentDocument = await res.json();
 
+    // Trigger Scanning Laser effect
+    triggerScanLaserEffect();
+
     // Refresh UI highlights
-    loadDocumentsQueue();
+    document.querySelectorAll('.pipeline-row-card').forEach((card, idx) => {
+      if (documentsList[idx] && documentsList[idx].id === docId) {
+        card.classList.add('selected');
+      } else {
+        card.classList.remove('selected');
+      }
+    });
 
     // Enable action buttons
     document.getElementById('btn-export-csv').disabled = false;
@@ -213,9 +275,13 @@ async function inspectDocument(docId) {
     imgEl.style.display = 'block';
     placeholderText.style.display = 'none';
 
+    // Update title badge
+    document.getElementById('inspector-doc-name').textContent = currentDocument.filename;
+
     // Populate Form Fields
     const ext = currentDocument.extraction || {};
     document.getElementById('input-vendor').value = ext.vendor_name || '';
+    document.getElementById('input-vendor-addr').value = ext.vendor_address || '';
     document.getElementById('input-inv-num').value = ext.invoice_number || '';
     document.getElementById('input-date').value = ext.invoice_date || '';
     document.getElementById('input-due-date').value = ext.due_date || '';
@@ -223,6 +289,16 @@ async function inspectDocument(docId) {
     document.getElementById('input-subtotal').value = ext.subtotal || 0;
     document.getElementById('input-tax').value = ext.tax_amount || 0;
     document.getElementById('input-total').value = ext.total_amount || 0;
+
+    // Update Math Integrity indicator status
+    const mathBanner = document.getElementById('math-status-banner');
+    if (ext.math_valid) {
+      mathBanner.className = 'math-status-badge valid';
+      mathBanner.innerHTML = '<i data-lucide="shield-check"></i> Math Consistent';
+    } else {
+      mathBanner.className = 'math-status-badge invalid';
+      mathBanner.innerHTML = '<i data-lucide="shield-alert"></i> Discrepancy Found';
+    }
 
     // Render Line Items
     renderLineItemsTable(currentDocument.line_items || []);
@@ -232,7 +308,7 @@ async function inspectDocument(docId) {
   }
 }
 
-// Line items inline table
+// Line items table
 function renderLineItemsTable(items) {
   const tbody = document.getElementById('line-items-tbody');
   tbody.innerHTML = '';
@@ -240,7 +316,7 @@ function renderLineItemsTable(items) {
   if (!items || items.length === 0) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="6" style="text-align: center; color: var(--text-muted); font-size: 0.8rem;">
+        <td colspan="6" style="text-align: center; color: var(--text-muted); font-size: 0.8rem; padding: 2rem;">
           No line items extracted. Click "Add Item" to add one manually.
         </td>
       </tr>
@@ -266,8 +342,8 @@ function renderLineItemsTable(items) {
         </select>
       </td>
       <td>
-        <button type="button" class="btn btn-outline btn-sm btn-del-item" style="color: var(--accent-danger); border: none;">
-          <i data-lucide="trash-2" style="width: 16px;"></i>
+        <button type="button" class="btn-icon-only btn-del-item" style="color: var(--color-danger); height: 28px; width: 28px;">
+          <i data-lucide="trash-2" style="width: 14px;"></i>
         </button>
       </td>
     `;
@@ -322,8 +398,8 @@ function addLineItemRow() {
       </select>
     </td>
     <td>
-      <button type="button" class="btn btn-outline btn-sm btn-del-item" style="color: var(--accent-danger); border: none;">
-        <i data-lucide="trash-2" style="width: 16px;"></i>
+      <button type="button" class="btn-icon-only btn-del-item" style="color: var(--color-danger); height: 28px; width: 28px;">
+        <i data-lucide="trash-2" style="width: 14px;"></i>
       </button>
     </td>
   `;
@@ -355,6 +431,18 @@ function recalculateSubtotalAndTotal() {
   subInput.value = sum.toFixed(2);
   const tax = parseFloat(taxInput.value) || 0;
   totalInput.value = (sum + tax).toFixed(2);
+  
+  // Verify math consistency visually
+  const mathBanner = document.getElementById('math-status-banner');
+  const diff = Math.abs((sum + tax) - parseFloat(totalInput.value));
+  if (diff <= 0.05) {
+    mathBanner.className = 'math-status-badge valid';
+    mathBanner.innerHTML = '<i data-lucide="shield-check"></i> Math Consistent';
+  } else {
+    mathBanner.className = 'math-status-badge invalid';
+    mathBanner.innerHTML = '<i data-lucide="shield-alert"></i> Discrepancy Found';
+  }
+  if (window.lucide) lucide.createIcons();
 }
 
 // Save & verify document
@@ -380,6 +468,7 @@ async function handleSaveVerification() {
   const payload = {
     extraction: {
       vendor_name: document.getElementById('input-vendor').value,
+      vendor_address: document.getElementById('input-vendor-addr').value,
       invoice_number: document.getElementById('input-inv-num').value,
       invoice_date: document.getElementById('input-date').value,
       due_date: document.getElementById('input-due-date').value,
@@ -422,11 +511,17 @@ async function handleFileUpload(files) {
     formData.append('files', files[i]);
   }
 
+  // Set scanning state
+  const laser = document.getElementById('scanner-laser-line');
+  laser.classList.add('scanning');
+
   try {
     const res = await fetch(`${API_BASE}/documents/upload`, {
       method: 'POST',
       body: formData
     });
+
+    laser.classList.remove('scanning');
 
     if (res.ok) {
       const uploadedDocs = await res.json();
@@ -439,6 +534,7 @@ async function handleFileUpload(files) {
       alert('Upload failed.');
     }
   } catch (e) {
+    laser.classList.remove('scanning');
     alert(`Upload error: ${e}`);
   }
 }
@@ -483,19 +579,21 @@ function renderVendorChart(data) {
       datasets: [{
         label: 'Total Spend ($)',
         data: values,
-        backgroundColor: 'rgba(99, 102, 241, 0.65)',
+        backgroundColor: 'rgba(99, 102, 241, 0.45)',
         borderColor: '#6366f1',
-        borderWidth: 1,
-        borderRadius: 6
+        borderWidth: 1.5,
+        borderRadius: 8
       }]
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
+      plugins: {
+        legend: { display: false }
+      },
       scales: {
-        x: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.05)' } },
-        y: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.05)' } }
+        x: { ticks: { color: '#64748b', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.03)' } },
+        y: { ticks: { color: '#64748b', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.03)' } }
       }
     }
   });
@@ -524,7 +622,7 @@ function renderCategoryChart(data) {
       responsive: true,
       maintainAspectRatio: false,
       plugins: {
-        legend: { position: 'right', labels: { color: '#94a3b8', font: { size: 11 } } }
+        legend: { position: 'right', labels: { color: '#94a3b8', font: { size: 10 } } }
       }
     }
   });
