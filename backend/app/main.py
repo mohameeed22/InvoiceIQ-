@@ -59,3 +59,27 @@ def root():
 @app.get("/health")
 def health_check():
     return {"status": "online", "version": settings.VERSION}
+
+@app.get("/api/v1/status")
+def system_status():
+    """Returns the active configuration status: AI provider, OCR backend, auth mode, and integrations."""
+    active_provider = "demo/fallback"
+    if settings.GROQ_API_KEY:
+        active_provider = "groq_llama3"
+    elif settings.OPENAI_API_KEY:
+        active_provider = "openai_gpt4o"
+    elif settings.GEMINI_API_KEY:
+        active_provider = "gemini_flash"
+
+    return {
+        "version": settings.VERSION,
+        "ai_provider": active_provider,
+        "ocr_backend": settings.OCR_BACKEND,
+        "auth_mode": "api_key" if settings.API_SECRET_KEY else "open_demo",
+        "base_currency": settings.BASE_CURRENCY,
+        "integrations": {
+            "google_sheets": bool(settings.GOOGLE_SHEET_ID and settings.GOOGLE_SERVICE_ACCOUNT_JSON),
+            "airtable": bool(settings.AIRTABLE_API_KEY and settings.AIRTABLE_BASE_ID),
+            "webhook": bool(settings.DEFAULT_WEBHOOK_URL),
+        }
+    }
